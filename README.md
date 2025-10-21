@@ -50,7 +50,7 @@ El script SQL crea la base `seguridad_db` y todas las tablas con datos de ejempl
 
 Ejecuta el inicializador SQL:
 ```
-python scripts_sql/execute_sql_file.py --sql-file scripts_sql/seguridad_db.sql --host localhost --user root --password 1234
+python scripts_sql/execute_sql_file.py --sql-file scripts_sql/seguridad_db.sql --host localhost --user root --password sin contraseña o contraseña establecida en base de datos personal.
 ```
 
 Notas:
