@@ -25,7 +25,7 @@ El proyecto usa variables de entorno para la conexión a MySQL (con valores por 
 - `MYSQL_HOST` (por defecto `localhost`)
 - `MYSQL_PORT` (por defecto `3306`)
 - `MYSQL_USER` (por defecto `root`)
-- `MYSQL_PASSWORD` (por defecto `1234`)
+- `MYSQL_PASSWORD` (por defecto ``)
 - `MYSQL_DATABASE` (por defecto `seguridad_db`)
 
 Ejemplos en Windows (cmd):
