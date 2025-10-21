@@ -67,10 +67,10 @@ Al arrancar, se asegura la columna `password` en `usuarios` y se muestra el men�
 
 ## Credenciales de ejemplo
 Los usuarios de ejemplo (cargados desde `seguridad_db.sql`) tienen contraseña por defecto `1234`:
-- Ana Torres (admin)
-- Jorge Ruiz (auditor)
-- Lucía Pérez (usuario)
-- Carla Gómez (usuario)
+- Ana Torres (admin) (contraseña: 1234)
+- Jorge Ruiz (auditor) (contraseña: 1234)
+- Lucía Pérez (usuario) (contraseña: 1234)
+- Carla Gómez (usuario) (contraseña: 1234)
 
 Nota: La columna `password` se agrega/asegura en el arranque mediante `ensure_password_column()`. Para usuarios existentes se aplica `DEFAULT '1234'`. Al crear nuevos usuarios, el admin puede establecer una contraseña propia.
 
