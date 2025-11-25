@@ -33,19 +33,20 @@ def detect_password(host: str, user: str, port: int = 3306):
 
 
 def execute_sql_file(connection, sql_path: str):
-    """Ejecuta todas las sentencias del archivo SQL sin usar 'multi', compatible con entornos antiguos."""
+    """Ejecuta el archivo SQL manejando cambios de DELIMITER y comentarios."""
     if not os.path.isfile(sql_path):
         raise FileNotFoundError(f"Archivo SQL no encontrado: {sql_path}")
 
     with open(sql_path, 'r', encoding='utf-8') as f:
         sql_script = f.read()
 
-    # Parseo simple por ';' ignorando comentarios '--' y bloques '/* */'
     statements = []
-    current = []
+    delimiter = ';'
+    buffer = []
     in_block_comment = False
     for line in sql_script.splitlines():
-        stripped = line.strip()
+        raw = line.rstrip('\n')
+        stripped = raw.strip()
         if not stripped:
             continue
         if in_block_comment:
@@ -57,15 +58,22 @@ def execute_sql_file(connection, sql_path: str):
             continue
         if stripped.startswith('--'):
             continue
-        current.append(stripped)
-        if stripped.endswith(';'):
-            stmt = ' '.join(current).rstrip(';').strip()
+        if stripped.upper().startswith('DELIMITER '):
+            if buffer:
+                stmt = '\n'.join(buffer).strip()
+                if stmt:
+                    statements.append(stmt.rstrip(delimiter))
+                buffer = []
+            delimiter = stripped.split('DELIMITER', 1)[1].strip()
+            continue
+        buffer.append(raw)
+        if stripped.endswith(delimiter):
+            stmt = '\n'.join(buffer).rstrip(delimiter).strip()
             if stmt:
                 statements.append(stmt)
-            current = []
-    # Agregar la última sentencia si quedó sin ';'
-    if current:
-        stmt = ' '.join(current).strip()
+            buffer = []
+    if buffer:
+        stmt = '\n'.join(buffer).strip()
         if stmt:
             statements.append(stmt)
 
@@ -73,6 +81,11 @@ def execute_sql_file(connection, sql_path: str):
     try:
         for stmt in statements:
             cursor.execute(stmt)
+            try:
+                if getattr(cursor, "with_rows", False):
+                    cursor.fetchall()
+            except Exception:
+                pass
         connection.commit()
     except Error as e:
         connection.rollback()
@@ -82,14 +95,27 @@ def execute_sql_file(connection, sql_path: str):
 
 
 def verify_schema(host: str, user: str, password: str, db_name: str, port: int = 3306):
-    """Conecta a la base de datos y lista tablas para verificar creación"""
+    """Verifica tablas, rutinas y triggers."""
     conn = mysql.connector.connect(host=host, user=user, password=password, database=db_name, port=port)
     cursor = conn.cursor()
     cursor.execute("SHOW TABLES")
     tables = [row[0] for row in cursor.fetchall()]
+
+    cursor.execute(
+        "SELECT ROUTINE_NAME, ROUTINE_TYPE FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=%s",
+        (db_name,)
+    )
+    routines = [f"{row[1]} {row[0]}" for row in cursor.fetchall()]
+
+    cursor.execute(
+        "SELECT TRIGGER_NAME, EVENT_MANIPULATION, EVENT_OBJECT_TABLE FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=%s",
+        (db_name,)
+    )
+    triggers = [f"{row[0]} ON {row[2]} {row[1]}" for row in cursor.fetchall()]
+
     cursor.close()
     conn.close()
-    return tables
+    return tables, routines, triggers
 
 
 def main():
@@ -99,6 +125,7 @@ def main():
     parser.add_argument('--user', default='root', help='Usuario de MySQL, por defecto root')
     parser.add_argument('--password', default=None, help='Contraseña de MySQL (opcional)')
     parser.add_argument('--sql-file', required=True, help='Ruta al archivo SQL a ejecutar')
+    parser.add_argument('--reset', action='store_true', help='Borrar y recrear datos (DROP + INSERTs). Por defecto no borra.')
 
     args = parser.parse_args()
 
@@ -123,16 +150,46 @@ def main():
 
         # Ejecutar archivo SQL
         print(f"📄 Ejecutando archivo SQL: {args.sql_file}")
-        execute_sql_file(conn, args.sql_file)
+        # Preprocesamiento: si no hay reset, filtramos DROP TABLE y hacemos INSERT IGNORE
+        if not args.reset:
+            with open(args.sql_file, 'r', encoding='utf-8') as f:
+                original = f.read()
+            lines = []
+            for raw in original.splitlines():
+                s = raw.strip()
+                if s.upper().startswith('DROP TABLE IF EXISTS '):
+                    continue
+                if s.upper().startswith('CREATE TABLE '):
+                    raw = raw.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ')
+                if s.upper().startswith('INSERT INTO '):
+                    raw = raw.replace('INSERT INTO', 'INSERT IGNORE INTO')
+                lines.append(raw)
+            temp_script = '\n'.join(lines)
+            tmp_path = args.sql_file + '.tmp_nodrop.sql'
+            with open(tmp_path, 'w', encoding='utf-8') as tf:
+                tf.write(temp_script)
+            execute_sql_file(conn, tmp_path)
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+        else:
+            execute_sql_file(conn, args.sql_file)
         print("✅ Archivo SQL ejecutado correctamente.")
 
         # Intentar obtener el nombre de la base creada desde el archivo (heurística)
         db_name = 'seguridad_db'
         print(f"🔎 Verificando esquema en '{db_name}'...")
-        tables = verify_schema(args.host, args.user, password, db_name, args.port)
+        tables, routines, triggers = verify_schema(args.host, args.user, password, db_name, args.port)
         print("📋 Tablas encontradas:")
         for t in tables:
             print(f"  • {t}")
+        print("🧩 Rutinas (funciones/procedimientos):")
+        for r in routines:
+            print(f"  • {r}")
+        print("⚙️ Triggers:")
+        for tr in triggers:
+            print(f"  • {tr}")
         print("\n🎉 ¡Base de datos creada/actualizada exitosamente!")
 
     except ModuleNotFoundError as e:
