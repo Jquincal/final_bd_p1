@@ -113,6 +113,8 @@ INSERT INTO alertas (id_alerta, id_usuario, mensaje, fecha) VALUES
   (1, 4, 'Usuario bloqueado por múltiples intentos fallidos', '2025-09-27'),
   (2, 2, 'IP sospechosa detectada (10.0.0.5)', '2025-09-25'),
   (3, 3, 'Desbloqueo exitoso registrado', '2025-09-28');
+
+-- Reafirmar base seleccionada antes de rutinas
 USE seguridad_db;
 
 -- ============================
