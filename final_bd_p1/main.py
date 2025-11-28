@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-  # Declaración de codificación del archivo fuente
 """
 Script principal de administración de la BD 'seguridad_db'.
 
@@ -10,22 +10,22 @@ Flujo:
 Requisitos:
 - pip install mysql-connector-python
 - BD creada con el script seguridad_db.sql
-"""
+"""  # Docstring de módulo: describe propósito general y requisitos
 
-import sys
-from typing import Optional
+import sys  # Salidas controladas y finalización del programa
+from typing import Optional  # Tipos opcionales (referencia, no crítico)
 
-from modules.seguridad import (
-    iniciar_sesion,
-    listar_roles,
-    listar_usuarios,
-    agregar_usuario,
-    cambiar_estado_bloqueo,
-    tiene_permiso,
-    ensure_password_column,
+from modules.seguridad import (  # Importa funcionalidades de usuarios/roles
+    iniciar_sesion,             # Iniciar sesión con nombre+password
+    listar_roles,               # Listar roles disponibles
+    listar_usuarios,            # Listar usuarios y estado
+    agregar_usuario,            # Alta de usuario
+    cambiar_estado_bloqueo,     # Bloqueo/Desbloqueo
+    tiene_permiso,              # Chequear permisos por rol (CSV)
+    ensure_password_column,     # Asegurar columna password en usuarios
 )
-from modules.auditoria import listar_auditoria
-from modules.consultas import (
+from modules.auditoria import listar_auditoria  # Listado de auditoría
+from modules.consultas import (  # Operaciones de accesos/sistemas/eventos/alertas
     listar_sistemas,
     registrar_acceso,
     listar_accesos,
@@ -41,11 +41,11 @@ def input_int(msg: str) -> int:
     """
     Lee entero de forma segura.
     """
-    while True:
+    while True:  # Bucle hasta recibir un entero válido
         try:
-            return int(input(msg).strip())
+            return int(input(msg).strip())  # Convierte entrada a int
         except ValueError:
-            print("⚠️  Ingresa un número válido.")
+            print("⚠️  Ingresa un número válido.")  # Mensaje de error y reintento
 
 
 def esperar_volver_menu():
@@ -53,278 +53,259 @@ def esperar_volver_menu():
     Pausa tras ejecutar una opción y espera confirmación para volver al menú.
     Acepta 'v', 'volver' o Enter.
     """
-    while True:
+    while True:  # Garantiza que el usuario confirme antes de volver
         resp = input("\nEscribe 'volver o v' y presiona Enter para volver al menú: ").strip().lower()
         if resp in ("v", "volver", ""):
-            break
+            break  # Sale cuando el usuario confirma
 
 
 def mostrar_usuarios():
     """
     Imprime usuarios con su estado y rol.
     """
-    users = listar_usuarios()
-    if not users:
+    users = listar_usuarios()  # Obtiene lista de usuarios
+    if not users:  # Si no hay registros, informa
         print("No hay usuarios.")
         return
     print("\nUsuarios:")
-    for u in users:
+    for u in users:  # Itera e imprime cada usuario con rol y estado
         estado = "bloqueado" if u["bloqueado"] else "activo"
         print(f" - [{u['id_usuario']}] {u['nombre']} ({u['rol']}, {estado})")
 
 
- 
+def run_menu(header: str, items):
+    # Despachador genérico de menús: evita múltiples if/elif.
+    # 'items' es una lista de tuplas (número, etiqueta, handler)
+    while True:  # Loop del menú hasta cerrar sesión
+        print(header)  # Encabezado del menú
+        for num, label, _ in items:  # Muestra opciones numeradas
+            print(f"{num}) {label}")
+        print("0) Cerrar sesión")  # Opción estándar de salida
+        op = input_int("Selecciona opción: ")  # Lectura robusta de opción
+        if op == 0:
+            print("Cerrando sesión...\n")
+            return  # Sale del menú
+        actions = {num: handler for num, _, handler in items}  # Mapea número→acción
+        action = actions.get(op)  # Busca el handler por número
+        if action:
+            action()  # Ejecuta la acción seleccionada
+        else:
+            print("Opción inválida.")  # Manejo de opción inexistente
 
 
 def menu_auditor(usuario_actual: str):
-    """
-    Menú para rol 'auditor'.
-    """
-    while True:
-        print(f"\n🕵️ Menú AUDITOR ({usuario_actual})")
-        print("1) Ver usuarios")
-        print("2) Ver accesos")
-        print("3) Ver sistemas")
-        print("4) Ver eventos")
-        print("5) Ver alertas")
-        print("6) Ver auditoría")
-        print("0) Cerrar sesión")
-
-        op = input_int("Selecciona opción: ")
-
-        if op == 0:
-            print("Cerrando sesión...\n")
-            return
-        elif op == 1:
-            mostrar_usuarios()
+    # Menú del rol 'auditor': solo lectura de entidades
+    header = f"\n🕵️ Menú AUDITOR ({usuario_actual})"  # Encabezado contextual
+    items = [
+        (1, "Ver usuarios", lambda: (mostrar_usuarios(), esperar_volver_menu())),
+        (2, "Ver accesos", lambda: (
+            (lambda rows: [
+                print("\nAccesos:"),
+                *[print(f" - [{r['id_acceso']}] {'✅' if r['exitoso'] else '❌'} {r['fecha']} {r['ip']} {r['sistema']}") for r in rows]
+            ])(listar_accesos()),
             esperar_volver_menu()
-        elif op == 2:
-            rows = listar_accesos()
-            print("\nAccesos:")
-            for r in rows:
-                ok = "✅" if r["exitoso"] else "❌"
-                print(f" - [{r['id_acceso']}] {ok} {r['fecha']} {r['ip']} {r['sistema']}")
+        )),
+        (3, "Ver sistemas", lambda: (
+            (lambda sistemas: [
+                print("\nSistemas:"),
+                *[print(f" - [{s['id_sistema']}] {s['nombre_sistema']} :: {s['descripcion']}") for s in sistemas]
+            ])(listar_sistemas()),
             esperar_volver_menu()
-        elif op == 3:
-            sistemas = listar_sistemas()
-            print("\nSistemas:")
-            for s in sistemas:
-                print(f" - [{s['id_sistema']}] {s['nombre_sistema']} :: {s['descripcion']}")
+        )),
+        (4, "Ver eventos", lambda: (
+            (lambda eventos: [
+                print("\nEventos:"),
+                *[print(f" - [{e['id_evento']}] {e['usuario']} :: {e['tipo_evento']} - {e['descripcion']} ({e['fecha']})") for e in eventos]
+            ])(listar_eventos()),
             esperar_volver_menu()
-        elif op == 4:
-            eventos = listar_eventos()
-            print("\nEventos:")
-            for e in eventos:
-                print(f" - [{e['id_evento']}] {e['usuario']} :: {e['tipo_evento']} - {e['descripcion']} ({e['fecha']})")
+        )),
+        (5, "Ver alertas", lambda: (
+            (lambda alertas: [
+                print("\nAlertas:"),
+                *[print(f" - [{a['id_alerta']}] {a['usuario']} :: {a['mensaje']} ({a['fecha']})") for a in alertas]
+            ])(listar_alertas()),
             esperar_volver_menu()
-        elif op == 5:
-            alertas = listar_alertas()
-            print("\nAlertas:")
-            for a in alertas:
-                print(f" - [{a['id_alerta']}] {a['usuario']} :: {a['mensaje']} ({a['fecha']})")
+        )),
+        (6, "Ver auditoría", lambda: (
+            (lambda aud: [
+                print("\nAuditoría:"),
+                *[print(f" - [{a['id_auditoria']}] {a['usuario']} :: {a['accion']} [{a['tabla_afectada']}] ({a['fecha']})") for a in aud]
+            ])(listar_auditoria()),
             esperar_volver_menu()
-        elif op == 6:
-            aud = listar_auditoria()
-            print("\nAuditoría:")
-            for a in aud:
-                print(f" - [{a['id_auditoria']}] {a['usuario']} :: {a['accion']} [{a['tabla_afectada']}] ({a['fecha']})")
-            esperar_volver_menu()
-        else:
-            print("Opción inválida.")
+        )),
+    ]
+    run_menu(header, items)  # Llama al despachador del menú
 
 
 def menu_usuario(usuario_actual: str, id_usuario: int):
-    """
-    Menú para rol 'usuario' (visualización propia).
-    """
-    while True:
-        print(f"\n👤 Menú USUARIO ({usuario_actual})")
-        print("1) Ver mis accesos")
-        print("2) Ver mis alertas")
-        print("3) Solicitar desbloqueo (crea evento)")
-        print("0) Cerrar sesión")
-
-        op = input_int("Selecciona opción: ")
-
-        if op == 0:
-            print("Cerrando sesión...\n")
-            return
-        elif op == 1:
-            rows = accesos_por_usuario(id_usuario)
-            print("\nMis accesos:")
-            for r in rows:
-                ok = "✅" if r["exitoso"] else "❌"
-                print(f" - [{r['id_acceso']}] {ok} {r['fecha']} {r['ip']} (sistema {r['id_sistema']})")
+    # Menú del rol 'usuario': vista propia y solicitud de desbloqueo
+    header = f"\n👤 Menú USUARIO ({usuario_actual})"
+    items = [
+        (1, "Ver mis accesos", lambda: (
+            (lambda rows: [
+                print("\nMis accesos:"),
+                *[print(f" - [{r['id_acceso']}] {'✅' if r['exitoso'] else '❌'} {r['fecha']} {r['ip']} (sistema {r['id_sistema']})") for r in rows]
+            ])(accesos_por_usuario(id_usuario)),
             esperar_volver_menu()
-        elif op == 2:
-            alertas = [a for a in listar_alertas() if a["usuario"] == usuario_actual]
-            print("\nMis alertas:")
-            for a in alertas:
-                print(f" - [{a['id_alerta']}] {a['mensaje']} ({a['fecha']})")
+        )),
+        (2, "Ver mis alertas", lambda: (
+            (lambda mis_alertas: [
+                print("\nMis alertas:"),
+                *[print(f" - [{a['id_alerta']}] {a['mensaje']} ({a['fecha']})") for a in mis_alertas]
+            ])([a for a in listar_alertas() if a["usuario"] == usuario_actual]),
             esperar_volver_menu()
-        elif op == 3:
-            crear_evento(id_usuario, "Solicitud desbloqueo", "Usuario solicita desbloqueo", actor=usuario_actual)
-            print("✅ Solicitud registrada.")
+        )),
+        (3, "Solicitar desbloqueo (crea evento)", lambda: (
+            crear_evento(id_usuario, "Solicitud desbloqueo", "Usuario solicita desbloqueo", actor=usuario_actual),
+            print("✅ Solicitud registrada."),
             esperar_volver_menu()
-        else:
-            print("Opción inválida.")
+        )),
+    ]
+    run_menu(header, items)  # Despacha el menú del usuario
 
 
 def main():
-    ensure_password_column()
+    ensure_password_column()  # Garantiza columna 'password' en 'usuarios'
     print("=========================================")
     print("  Sistema de Seguridad - Administración  ")
-    print("=========================================\n")
+    print("=========================================\n")  # Encabezado de la aplicación
 
-    while True:
+    while True:  # Bucle del menú inicial
         print("Menú inicial")
         print("1) Iniciar sesión")
         print("0) Salir")
 
-        op = input_int("Selecciona opción: ")
+        op = input_int("Selecciona opción: ")  # Opción de inicio/salida
 
         if op == 0:
             print("Hasta luego!")
-            sys.exit(0)
+            sys.exit(0)  # Termina el programa
         elif op == 1:
-            nombre = input("Nombre de usuario: ").strip()
-            password = input("Contraseña: ").strip()
-            u = iniciar_sesion(nombre, password)
+            nombre = input("Nombre de usuario: ").strip()  # Captura nombre
+            password = input("Contraseña: ").strip()       # Captura password
+            u = iniciar_sesion(nombre, password)            # Valida credenciales
             if u is None:
                 print("❌ Usuario no encontrado.")
-                continue
+                continue  # Vuelve al menú
             if "error" in u:
                 print(f"❌ {u['error']}")
-                continue
+                continue  # Error de login: bloqueado o contraseña incorrecta
 
             rol = u["rol"]
             print(f"✅ Sesión iniciada: {u['nombre']} ({rol})")
 
+            # Enrutamiento por rol usando mapeo de funciones (evita if/elif)
             menu_by_role = {
                 "admin": lambda user: menu_admin(user),
                 "auditor": lambda user: menu_auditor(usuario_actual=user["nombre"]),
                 "usuario": lambda user: menu_usuario(usuario_actual=user["nombre"], id_usuario=user["id_usuario"]),
             }
-            handler = menu_by_role.get(rol)
+            handler = menu_by_role.get(rol)  # Obtiene handler por rol
             if handler:
-                handler(u)
+                handler(u)  # Ejecuta menú correspondiente
             else:
-                print("Rol inválido.")
+                print("Rol inválido.")  # Rol desconocido
         else:
-            print("Opción inválida.")
+            print("Opción inválida.")  # Opción fuera de rango
 
 
 def menu_admin(user):
     """
     Menú para rol 'admin'.
     """
-    usuario_actual = user["nombre"]
-    while True:
-        print(f"\n👑 Menú ADMIN ({usuario_actual})")
-        print("1) Ver usuarios")
-        print("2) Agregar usuario")
-        print("3) Bloquear/Desbloquear usuario")
-        print("4) Registrar acceso")
-        print("5) Ver accesos")
-        print("6) Ver sistemas")
-        print("7) Crear evento de seguridad")
-        print("8) Ver eventos")
-        print("9) Crear alerta")
-        print("10) Ver alertas")
-        print("11) Ver auditoría")
-        print("0) Cerrar sesión")
-
-        op = input_int("Selecciona opción: ")
-
-        if op == 0:
-            print("Cerrando sesión...\n")
-            return
-        elif op == 1:
-            mostrar_usuarios()
+    usuario_actual = user["nombre"]  # Nombre del usuario en sesión
+    header = f"\n👑 Menú ADMIN ({usuario_actual})"  # Encabezado
+    items = [
+        (1, "Ver usuarios", lambda: (mostrar_usuarios(), esperar_volver_menu())),
+        (2, "Agregar usuario", lambda: (
+            (lambda nombre, rol, password: (
+                (lambda nuevo: print(f"✅ Usuario creado: {nuevo}"))(agregar_usuario(nombre, rol, bloqueado=False, password=password if password else None))
+            ))(
+                input("Nombre nuevo usuario: ").strip(),           # Captura nombre
+                input("Rol (admin/auditor/usuario): ").strip(),    # Captura rol
+                input("Contraseña (dejá en blanco para '1234'): ").strip(),  # Captura password
+            ),
             esperar_volver_menu()
-        elif op == 2:
-            nombre = input("Nombre nuevo usuario: ").strip()
-            rol = input("Rol (admin/auditor/usuario): ").strip()
-            password = input("Contraseña (dejá en blanco para '1234'): ").strip()
-            try:
-                nuevo = agregar_usuario(nombre, rol, bloqueado=False, password=password if password else None)
-                print(f"✅ Usuario creado: {nuevo}")
-            except Exception as e:
-                print(f"❌ Error: {e}")
+        )),
+        (3, "Bloquear/Desbloquear usuario", lambda: (
+            (lambda idu, estado: (
+                (lambda target: (
+                    cambiar_estado_bloqueo(idu, target, actor=usuario_actual),  # Actualiza estado
+                    print("✅ Estado actualizado."),
+                ))(True if estado.startswith("bloq") else False)
+            ))(
+                input_int("ID usuario: "),                                # ID a modificar
+                input("Estado (bloquear/desbloquear): ").strip().lower(),  # Decide bloquear/desbloquear
+            ),
             esperar_volver_menu()
-        elif op == 3:
-            idu = input_int("ID usuario: ")
-            estado = input("Estado (bloquear/desbloquear): ").strip().lower()
-            target = True if estado.startswith("bloq") else False
-            try:
-                cambiar_estado_bloqueo(idu, target, actor=usuario_actual)
-                print("✅ Estado actualizado.")
-            except Exception as e:
-                print(f"❌ Error: {e}")
+        )),
+        (4, "Registrar acceso", lambda: (
+            (lambda idu, exitoso, ip, sis: (
+                (lambda nuevo_id: print(f"✅ Acceso registrado (id={nuevo_id})."))(registrar_acceso(idu, exitoso, ip, sis, actor=usuario_actual))
+            ))(
+                input_int("ID usuario: "),                 # Usuario del acceso
+                input("¿Exitoso? (s/n): ").strip().lower().startswith("s"),  # Resultado
+                input("IP: ").strip(),                      # IP del acceso
+                input_int("ID sistema: "),                  # Sistema destino
+            ),
             esperar_volver_menu()
-        elif op == 4:
-            idu = input_int("ID usuario: ")
-            exitoso = input("¿Exitoso? (s/n): ").strip().lower().startswith("s")
-            ip = input("IP: ").strip()
-            sis = input_int("ID sistema: ")
-            try:
-                nuevo_id = registrar_acceso(idu, exitoso, ip, sis, actor=usuario_actual)
-                print(f"✅ Acceso registrado (id={nuevo_id}).")
-            except Exception as e:
-                print(f"❌ Error: {e}")
+        )),
+        (5, "Ver accesos", lambda: (
+            (lambda rows: [
+                print("\nAccesos:"),
+                *[print(f" - [{r['id_acceso']}] {r['usuario']} {'✅' if r['exitoso'] else '❌'} {r['fecha']} {r['ip']} {r['sistema']}") for r in rows]
+            ])(listar_accesos()),
             esperar_volver_menu()
-        elif op == 5:
-            rows = listar_accesos()
-            print("\nAccesos:")
-            for r in rows:
-                ok = "✅" if r["exitoso"] else "❌"
-                print(f" - [{r['id_acceso']}] {r['usuario']} {ok} {r['fecha']} {r['ip']} {r['sistema']}")
+        )),
+        (6, "Ver sistemas", lambda: (
+            (lambda sistemas: [
+                print("\nSistemas:"),
+                *[print(f" - [{s['id_sistema']}] {s['nombre_sistema']} :: {s['descripcion']}") for s in sistemas]
+            ])(listar_sistemas()),
             esperar_volver_menu()
-        elif op == 6:
-            sistemas = listar_sistemas()
-            print("\nSistemas:")
-            for s in sistemas:
-                print(f" - [{s['id_sistema']}] {s['nombre_sistema']} :: {s['descripcion']}")
+        )),
+        (7, "Crear evento de seguridad", lambda: (
+            (lambda idu, tipo, desc: (
+                (lambda eid: print(f"✅ Evento creado (id={eid})."))(crear_evento(idu, tipo, desc, actor=usuario_actual))
+            ))(
+                input_int("ID usuario: "),          # Usuario objetivo
+                input("Tipo de evento: ").strip(),   # Tipo de evento
+                input("Descripción: ").strip(),      # Descripción
+            ),
             esperar_volver_menu()
-        elif op == 7:
-            idu = input_int("ID usuario: ")
-            tipo = input("Tipo de evento: ").strip()
-            desc = input("Descripción: ").strip()
-            try:
-                eid = crear_evento(idu, tipo, desc, actor=usuario_actual)
-                print(f"✅ Evento creado (id={eid}).")
-            except Exception as e:
-                print(f"❌ Error: {e}")
+        )),
+        (8, "Ver eventos", lambda: (
+            (lambda eventos: [
+                print("\nEventos:"),
+                *[print(f" - [{e['id_evento']}] {e['usuario']} :: {e['tipo_evento']} - {e['descripcion']} ({e['fecha']})") for e in eventos]
+            ])(listar_eventos()),
             esperar_volver_menu()
-        elif op == 8:
-            eventos = listar_eventos()
-            print("\nEventos:")
-            for e in eventos:
-                print(f" - [{e['id_evento']}] {e['usuario']} :: {e['tipo_evento']} - {e['descripcion']} ({e['fecha']})")
+        )),
+        (9, "Crear alerta", lambda: (
+            (lambda idu, msg: (
+                (lambda aid: print(f"✅ Alerta creada (id={aid})."))(crear_alerta(idu, msg, actor=usuario_actual))
+            ))(
+                input_int("ID usuario: "),          # Usuario destinatario
+                input("Mensaje de alerta: ").strip(),# Mensaje
+            ),
             esperar_volver_menu()
-        elif op == 9:
-            idu = input_int("ID usuario: ")
-            msg = input("Mensaje de alerta: ").strip()
-            try:
-                aid = crear_alerta(idu, msg, actor=usuario_actual)
-                print(f"✅ Alerta creada (id={aid}).")
-            except Exception as e:
-                print(f"❌ Error: {e}")
+        )),
+        (10, "Ver alertas", lambda: (
+            (lambda alertas: [
+                print("\nAlertas:"),
+                *[print(f" - [{a['id_alerta']}] {a['usuario']} :: {a['mensaje']} ({a['fecha']})") for a in alertas]
+            ])(listar_alertas()),
             esperar_volver_menu()
-        elif op == 10:
-            alertas = listar_alertas()
-            print("\nAlertas:")
-            for a in alertas:
-                print(f" - [{a['id_alerta']}] {a['usuario']} :: {a['mensaje']} ({a['fecha']})")
+        )),
+        (11, "Ver auditoría", lambda: (
+            (lambda aud: [
+                print("\nAuditoría:"),
+                *[print(f" - [{a['id_auditoria']}] {a['usuario']} :: {a['accion']} [{a['tabla_afectada']}] ({a['fecha']})") for a in aud]
+            ])(listar_auditoria()),
             esperar_volver_menu()
-        elif op == 11:
-            aud = listar_auditoria()
-            print("\nAuditoría:")
-            for a in aud:
-                print(f" - [{a['id_auditoria']}] {a['usuario']} :: {a['accion']} [{a['tabla_afectada']}] ({a['fecha']})")
-            esperar_volver_menu()
-        else:
-            print("Opción inválida.")
+        )),
+    ]
+    run_menu(header, items)  # Despacha ítems del menú admin
 
 
 if __name__ == "__main__":

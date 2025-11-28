@@ -1,38 +1,36 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-  # Codificación del archivo fuente
 """
 Consultas y registros en tablas operativas:
 - Accesos (registro y listados, propios y generales)
 - Sistemas (listado)
 - Eventos de seguridad (crear y listar)
 - Alertas (crear y listar)
-"""
+"""  # Docstring de módulo: responsabilidades
 
-from datetime import date
-from typing import List, Dict, Optional
+from datetime import date  # Fechas para registros
+from typing import List, Dict, Optional  # Tipos de retorno
 
-from db import get_connection, db_cursor, get_next_id
-from modules.auditoria import registrar_accion
+from db import get_connection, db_cursor, get_next_id  # Helpers de BD
+from modules.auditoria import registrar_accion         # Registro de auditoría
 
 
 def listar_sistemas() -> List[Dict]:
-    conn = get_connection()
+    conn = get_connection()  # Abre conexión
     try:
-        with db_cursor(conn) as cur:
+        with db_cursor(conn) as cur:  # Cursor con commit/rollback automático
             cur.execute(
                 "SELECT id_sistema, nombre_sistema, descripcion FROM sistemas ORDER BY id_sistema"
-            )
-            return cur.fetchall()
+            )  # Consulta ordenada
+            return cur.fetchall()  # Retorna lista de sistemas
     finally:
         conn.close()
 
 
 def registrar_acceso(id_usuario: int, exitoso: bool, ip: str, id_sistema: int, actor: str) -> int:
-    """
-    Inserta un acceso y registra auditoría.
-    """
+    """Inserta un acceso y registra auditoría."""
     conn = get_connection()
     try:
-        nuevo_id = get_next_id(conn, "accesos", "id_acceso")
+        nuevo_id = get_next_id(conn, "accesos", "id_acceso")  # Próximo ID
         with db_cursor(conn) as cur:
             cur.execute(
                 """
@@ -40,17 +38,15 @@ def registrar_acceso(id_usuario: int, exitoso: bool, ip: str, id_sistema: int, a
                 VALUES (%s, %s, %s, %s, %s, %s)
                 """,
                 (nuevo_id, id_usuario, date.today(), exitoso, ip, id_sistema),
-            )
-        registrar_accion(actor, "INSERT", "accesos")
+            )  # Inserta registro de acceso
+        registrar_accion(actor, "INSERT", "accesos")  # Auditoría del actor
         return nuevo_id
     finally:
         conn.close()
 
 
 def listar_accesos(limit: int = 100) -> List[Dict]:
-    """
-    Lista accesos con nombre de usuario y sistema (JOIN).
-    """
+    """Lista accesos con nombre de usuario y sistema (JOIN)."""
     conn = get_connection()
     try:
         with db_cursor(conn) as cur:
@@ -66,15 +62,13 @@ def listar_accesos(limit: int = 100) -> List[Dict]:
                 """,
                 (limit,),
             )
-            return cur.fetchall()
+            return cur.fetchall()  # Devuelve lista con joins
     finally:
         conn.close()
 
 
 def accesos_por_usuario(id_usuario: int, limit: int = 50) -> List[Dict]:
-    """
-    Lista accesos del usuario dado.
-    """
+    """Lista accesos del usuario dado."""
     conn = get_connection()
     try:
         with db_cursor(conn) as cur:
@@ -88,18 +82,16 @@ def accesos_por_usuario(id_usuario: int, limit: int = 50) -> List[Dict]:
                 """,
                 (id_usuario, limit),
             )
-            return cur.fetchall()
+            return cur.fetchall()  # Accesos del usuario
     finally:
         conn.close()
 
 
 def crear_evento(id_usuario: int, tipo_evento: str, descripcion: str, actor: str) -> int:
-    """
-    Inserta evento de seguridad para usuario.
-    """
+    """Inserta evento de seguridad para usuario."""
     conn = get_connection()
     try:
-        nuevo_id = get_next_id(conn, "eventos_seguridad", "id_evento")
+        nuevo_id = get_next_id(conn, "eventos_seguridad", "id_evento")  # Próximo ID
         with db_cursor(conn) as cur:
             cur.execute(
                 """
@@ -107,8 +99,8 @@ def crear_evento(id_usuario: int, tipo_evento: str, descripcion: str, actor: str
                 VALUES (%s, %s, %s, %s, %s)
                 """,
                 (nuevo_id, id_usuario, tipo_evento, descripcion, date.today()),
-            )
-        registrar_accion(actor, "INSERT", "eventos_seguridad")
+            )  # Inserta evento
+        registrar_accion(actor, "INSERT", "eventos_seguridad")  # Auditoría
         return nuevo_id
     finally:
         conn.close()
@@ -128,7 +120,7 @@ def listar_eventos(limit: int = 100) -> List[Dict]:
                 """,
                 (limit,),
             )
-            return cur.fetchall()
+            return cur.fetchall()  # Lista con join de usuarios
     finally:
         conn.close()
 
@@ -136,7 +128,7 @@ def listar_eventos(limit: int = 100) -> List[Dict]:
 def crear_alerta(id_usuario: int, mensaje: str, actor: str) -> int:
     conn = get_connection()
     try:
-        nuevo_id = get_next_id(conn, "alertas", "id_alerta")
+        nuevo_id = get_next_id(conn, "alertas", "id_alerta")  # Próximo ID
         with db_cursor(conn) as cur:
             cur.execute(
                 """
@@ -144,8 +136,8 @@ def crear_alerta(id_usuario: int, mensaje: str, actor: str) -> int:
                 VALUES (%s, %s, %s, %s)
                 """,
                 (nuevo_id, id_usuario, mensaje, date.today()),
-            )
-        registrar_accion(actor, "INSERT", "alertas")
+            )  # Inserta alerta
+        registrar_accion(actor, "INSERT", "alertas")  # Auditoría
         return nuevo_id
     finally:
         conn.close()
@@ -165,6 +157,6 @@ def listar_alertas(limit: int = 100) -> List[Dict]:
                 """,
                 (limit,),
             )
-            return cur.fetchall()
+            return cur.fetchall()  # Lista de alertas con join
     finally:
         conn.close()
